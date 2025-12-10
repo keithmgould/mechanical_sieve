@@ -135,7 +135,7 @@
     // ----- Shaft -----
     // Shaft is along the X axis, rotating around the X axis
     const shaftRadius = 0.15;
-    const shaftLength = 30;
+    const shaftLength = 12;
 
     const shaftGeom = new THREE.CylinderGeometry(
       shaftRadius,
@@ -215,8 +215,8 @@
       side: THREE.DoubleSide
     });
 
-    let primes = [2, 3, 5];  // starting gears
-    let maxGearN = 5;
+    let primes = [2];  // starting gears
+    let maxGearN = 2;
 
     function addGear(n) {
       if (gears.has(n)) return;
@@ -299,10 +299,8 @@
       }
     }
 
-    // Add initial prime gears C2, C3, C5
+    // Add initial prime gear C2
     addGear(2);
-    addGear(3);
-    addGear(5);
 
     // ----- Window logic / animation state -----
     let shaftTurns = 0;           // total rotations of the shaft
@@ -415,13 +413,11 @@
       shaftTurns = 0;
       currentWholeTurn = 0;
       previousWholeTurn = 0;
-      primes = [2, 3, 5];
-      maxGearN = 5;
+      primes = [2];
+      maxGearN = 2;
 
-      // Re-add initial gears
+      // Re-add initial gear
       addGear(2);
-      addGear(3);
-      addGear(5);
 
       // Reset visuals
       shaft.rotation.x = 0;
