@@ -2,7 +2,7 @@
 
 An interactive 3D visualization of a mechanical prime number sieve, inspired by the Sieve of Eratosthenes.
 
-This project is based on the concept explained in this excellent video: [https://youtu.be/5GF_pQyrpCs](https://youtu.be/5GF_pQyrpCs)
+I explain it in this three minute video: [https://youtu.be/5GF_pQyrpCs](https://youtu.be/5GF_pQyrpCs)
 
 ## How It Works
 
