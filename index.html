@@ -63,9 +63,28 @@
       color: #c0c0c0;
       line-height: 1.35;
     }
+
+    #bigR {
+      position: absolute;
+      top: 20px;
+      right: 30px;
+      font-size: 120px;
+      font-weight: 700;
+      font-family: "Menlo", "SF Mono", Consolas, monospace;
+      color: #ffffff;
+      z-index: 10;
+      text-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+    }
+
+    #bigR .label {
+      font-size: 32px;
+      font-weight: 400;
+      color: #888;
+    }
   </style>
 </head>
 <body>
+  <div id="bigR"><span class="label">R = </span><span id="bigRValue">2</span></div>
   <div id="overlay">
     <h1>Mechanical Prime Sieve</h1>
     <div class="row">
@@ -131,6 +150,7 @@
     const rotationCountEl = document.getElementById('rotationCount');
     const windowTextEl    = document.getElementById('windowText');
     const gearsListEl     = document.getElementById('gearsList');
+    const bigRValueEl     = document.getElementById('bigRValue');
 
     // ----- Shaft -----
     // Shaft is along the X axis, rotating around the X axis
@@ -385,6 +405,7 @@
 
     function updateUI(turn, isOpen) {
       rotationCountEl.textContent = String(turn);
+      bigRValueEl.textContent = String(turn);
       if (isOpen) {
         windowTextEl.textContent = 'OPEN';
         windowTextEl.classList.remove('blocked');
@@ -441,17 +462,12 @@
       });
 
       // Check if we've passed a new whole rotation of the shaft
-      if (direction === 1) {
-        currentWholeTurn = Math.floor(shaftTurns + 1e-6);
-      } else {
-        // When going backwards, use ceiling to detect crossing
-        currentWholeTurn = Math.ceil(shaftTurns - 1e-6);
-      }
+      // Always use floor - this gives us the "current" integer rotation
+      currentWholeTurn = Math.floor(shaftTurns + 1e-6);
 
       if (currentWholeTurn !== previousWholeTurn) {
-        // When going backwards, check if we need to remove a gear
         if (direction === -1 && previousWholeTurn > currentWholeTurn) {
-          // We crossed from previousWholeTurn to currentWholeTurn (going down)
+          // Going backwards: we just left previousWholeTurn and arrived at currentWholeTurn
           // If previousWholeTurn was a prime we added, remove it
           if (gears.has(previousWholeTurn) && previousWholeTurn > 2) {
             removeGear(previousWholeTurn);
