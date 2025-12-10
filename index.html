@@ -98,9 +98,10 @@
       Gears (primes): <span id="gearsList">2, 3, 5</span>
     </div>
     <div id="hint">
-      Each glass disc is a gear C<sub>n</sub>. A dot turns red when that gear blocks the window at this rotation.
-      When the window is open at rotation <em>k</em> and k is larger than all existing gears, a new gear C<sub>k</sub> appears
-      (which ends up being prime).
+      Each disc C<sub>n</sub> has a 1/n opaque slice. When a slice blocks the green viewing tube, it turns red.
+      When you can see the yellow target through the tube, the window is open &mdash; you've found a prime!
+      <br><br>
+      <strong>Controls:</strong> Space = pause, R = restart, F = forward, D = reverse, V = view through tube
     </div>
   </div>
 
@@ -537,6 +538,11 @@
         direction = 1;
         paused = false;
         lastTime = performance.now();
+      } else if (e.code === 'KeyV') {
+        // View through the tube
+        camera.position.set(tubeStartX - 2, tubeY, 0);
+        controls.target.set(tubeEndX, tubeY, 0);
+        controls.update();
       }
     });
   </script>
