@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Mechanical Prime Sieve – Gear Demo</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #050608;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #f5f5f5;
+    }
+
+    #overlay {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      padding: 12px 16px;
+      background: rgba(0, 0, 0, 0.65);
+      border-radius: 10px;
+      backdrop-filter: blur(8px);
+      max-width: 320px;
+      z-index: 10;
+      font-size: 14px;
+    }
+
+    #overlay h1 {
+      margin: 0 0 6px;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    #overlay .row {
+      margin: 4px 0;
+    }
+
+    #windowText {
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 6px;
+    }
+
+    #windowText.open {
+      background: rgba(0, 200, 120, 0.3);
+      color: #7bffa8;
+    }
+
+    #windowText.blocked {
+      background: rgba(220, 60, 60, 0.3);
+      color: #ff9b9b;
+    }
+
+    #gearsList {
+      font-family: "Menlo", "SF Mono", Consolas, monospace;
+      font-size: 13px;
+    }
+
+    #hint {
+      margin-top: 6px;
+      font-size: 11px;
+      color: #c0c0c0;
+      line-height: 1.35;
+    }
+  </style>
+</head>
+<body>
+  <div id="overlay">
+    <h1>Mechanical Prime Sieve</h1>
+    <div class="row">
+      Rotation: <span id="rotationCount">0</span>
+    </div>
+    <div class="row">
+      Window:
+      <span id="windowText" class="open">OPEN</span>
+    </div>
+    <div class="row">
+      Gears (primes): <span id="gearsList">2, 3, 5</span>
+    </div>
+    <div id="hint">
+      Each glass disc is a gear C<sub>n</sub>. A dot turns red when that gear blocks the window at this rotation.
+      When the window is open at rotation <em>k</em> and k is larger than all existing gears, a new gear C<sub>k</sub> appears
+      (which ends up being prime).
+    </div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.161.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.161.0/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ----- Basic three.js setup -----
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x050608);
+
+    const camera = new THREE.PerspectiveCamera(
+      45,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      100
+    );
+    camera.position.set(0, 4, 12);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.target.set(0, 0, 0);
+
+    // Lights
+    const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambient);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(5, 10, 7);
+    scene.add(dirLight);
+
+    // ----- UI elements -----
+    const rotationCountEl = document.getElementById('rotationCount');
+    const windowTextEl    = document.getElementById('windowText');
+    const gearsListEl     = document.getElementById('gearsList');
+
+    // ----- Shaft -----
+    // Shaft is along the X axis, rotating around the X axis
+    const shaftRadius = 0.15;
+    const shaftLength = 30;
+
+    const shaftGeom = new THREE.CylinderGeometry(
+      shaftRadius,
+      shaftRadius,
+      shaftLength,
+      32
+    );
+    const shaftMat = new THREE.MeshStandardMaterial({
+      color: 0xb0b0b0,
+      metalness: 0.7,
+      roughness: 0.3
+    });
+
+    const shaft = new THREE.Mesh(shaftGeom, shaftMat);
+    shaft.rotation.z = Math.PI / 2; // make it run along X instead of Y
+    scene.add(shaft);
+
+    // ----- Gears (glass discs) -----
+    const gears = new Map(); // n -> { n, mesh, dot, isBlocking }
+
+    const baseGearRadius = 0.8;
+    const gearThickness  = 0.18;
+
+    // ----- Viewing tube (shows where to look through the disks) -----
+    const tubeRadius = 0.15;
+    const gearSpacing = 2.1; // distance along the X axis between gear centers
+    // C2 is at index 0, positioned at (0 - 1.5) * gearSpacing = -3.15
+    // Tube should start just past C2 on the left and extend to the target on the right
+    const tubeStartX = -1.5 * gearSpacing - 1.5; // just past C2
+    const tubeEndX = shaftLength / 2; // toward the target
+    const tubeLength = tubeEndX - tubeStartX;
+    const tubeCenterX = (tubeStartX + tubeEndX) / 2;
+
+    const tubeGeom = new THREE.CylinderGeometry(tubeRadius, tubeRadius, tubeLength, 32, 1, true);
+    const tubeMat = new THREE.MeshStandardMaterial({
+      color: 0x00ff88,
+      emissive: 0x00ff88,
+      emissiveIntensity: 0.3,
+      transparent: true,
+      opacity: 0.3,
+      side: THREE.DoubleSide
+    });
+    const viewingTube = new THREE.Mesh(tubeGeom, tubeMat);
+    viewingTube.rotation.z = Math.PI / 2; // align along X axis
+    // Position at the bottom edge of the gears (where they touch the shaft)
+    const tubeY = shaftRadius + baseGearRadius;
+    viewingTube.position.set(tubeCenterX, tubeY, 0);
+    scene.add(viewingTube);
+
+    // ----- Target at far end of tube (what you see when window is open) -----
+    const targetGeom = new THREE.CircleGeometry(0.4, 32);
+    const targetMat = new THREE.MeshStandardMaterial({
+      color: 0xffff00,
+      emissive: 0xffff00,
+      emissiveIntensity: 0.8,
+      side: THREE.DoubleSide
+    });
+    const target = new THREE.Mesh(targetGeom, targetMat);
+    target.position.set(tubeEndX + 0.5, tubeY, 0); // at far end
+    target.rotation.y = Math.PI / 2; // face along the X axis
+    scene.add(target);
+
+    const gearGlassMaterial = new THREE.MeshStandardMaterial({
+      color: 0x55aaff,
+      transparent: true,
+      opacity: 0.2,
+      metalness: 0.1,
+      roughness: 0.1,
+      side: THREE.DoubleSide
+    });
+
+    const opaqueSliceMaterial = new THREE.MeshStandardMaterial({
+      color: 0xff0000,
+      transparent: false,
+      metalness: 0.2,
+      roughness: 0.3,
+      side: THREE.DoubleSide
+    });
+
+    let primes = [2, 3, 5];  // starting gears
+    let maxGearN = 5;
+
+    function addGear(n) {
+      if (gears.has(n)) return;
+
+      // Gear radius is proportional to n (so circumference is proportional to n)
+      // This means Cn rotates 1/n as fast as C1 when driven by the shaft
+      const gearRadius = baseGearRadius * n;
+
+      const index = gears.size; // placement index (0,1,2,...)
+      const xPos = (index - 1.5) * gearSpacing; // roughly center initial 4 around 0
+
+      // Create a group to hold both the transparent part and opaque slice
+      const group = new THREE.Group();
+      group.position.set(xPos, gearRadius + shaftRadius, 0);
+      // rotation.z = PI/2 makes the cylinder axis go along world X (the shaft direction)
+      group.rotation.z = Math.PI / 2;
+
+      // Inner group that we'll rotate around the cylinder's axis (Y before outer rotation)
+      // to position the opaque slice edge at the bottom (toward the tube)
+      const diskGroup = new THREE.Group();
+
+      // Opaque slice: 1/n of the disk, starting at theta=0
+      const opaqueAngle = (2 * Math.PI) / n;
+      const opaqueGeom = new THREE.CylinderGeometry(
+        gearRadius,
+        gearRadius,
+        gearThickness,
+        64,
+        1,
+        false,
+        0,
+        opaqueAngle
+      );
+      const opaqueMesh = new THREE.Mesh(opaqueGeom, opaqueSliceMaterial.clone());
+      diskGroup.add(opaqueMesh);
+
+      // Transparent part: the rest of the disk
+      const transparentAngle = (2 * Math.PI) - opaqueAngle;
+      const transparentGeom = new THREE.CylinderGeometry(
+        gearRadius,
+        gearRadius,
+        gearThickness,
+        64,
+        1,
+        false,
+        opaqueAngle,
+        transparentAngle
+      );
+      const transparentMesh = new THREE.Mesh(transparentGeom, gearGlassMaterial.clone());
+      diskGroup.add(transparentMesh);
+
+      // Position the opaque slice so its starting edge is at the window
+      // -PI/2 was working to align the edge with the tube
+      // The gears rotate negatively (opposite to shaft), so the slice moves
+      // in the negative theta direction as the shaft turns.
+      // We want the slice to block at R=n, 2n, 3n...
+      // So at R=0, the slice should be positioned so that after n shaft rotations
+      // (= 1 full gear rotation), it's back blocking.
+      // With edge at window at R=0, the slice is just about to enter (or just left).
+      // We need to shift by the slice width so the slice is blocking at R=0.
+      diskGroup.rotation.y = -Math.PI / 2 - opaqueAngle;
+
+      group.add(diskGroup);
+      scene.add(group);
+
+      gears.set(n, {
+        n,
+        mesh: group,
+        opaqueMesh,
+        isBlocking: false
+      });
+
+      // Track primes list (exclude 1, it's just the shaft tracker)
+      if (n > 1 && !primes.includes(n)) {
+        primes.push(n);
+        primes.sort((a, b) => a - b);
+      }
+      if (n > 1) {
+        maxGearN = Math.max(maxGearN, n);
+      }
+    }
+
+    // Add initial prime gears C2, C3, C5
+    addGear(2);
+    addGear(3);
+    addGear(5);
+
+    // ----- Window logic / animation state -----
+    let shaftTurns = 0;           // total rotations of the shaft
+    let currentWholeTurn = 0;     // floor(shaftTurns)
+    let previousWholeTurn = 0;
+    let windowOpen = true;
+
+    const turnsPerSecond = 0.4;   // speed
+
+    function updateForWholeTurn(turn) {
+      // Determine which gears are blocking at this integer rotation
+      let anyBlocking = false;
+      gears.forEach((gear) => {
+        const n = gear.n;
+        const isBlock = (turn > 0 && turn % n === 0); // block when turn is a multiple of n
+        gear.isBlocking = isBlock;
+        anyBlocking = anyBlocking || isBlock;
+      });
+
+      windowOpen = !anyBlocking;
+
+      // If window is open and the turn number is larger than any existing gear,
+      // add a new gear C_turn. This only happens at primes with this sieve logic.
+      if (windowOpen && turn > maxGearN && turn > 1) {
+        addGear(turn);
+      }
+
+      updateUI(turn, windowOpen);
+    }
+
+    function updateUI(turn, isOpen) {
+      rotationCountEl.textContent = String(turn);
+      if (isOpen) {
+        windowTextEl.textContent = 'OPEN';
+        windowTextEl.classList.remove('blocked');
+        windowTextEl.classList.add('open');
+      } else {
+        windowTextEl.textContent = 'BLOCKED';
+        windowTextEl.classList.remove('open');
+        windowTextEl.classList.add('blocked');
+      }
+      gearsListEl.textContent = primes.join(', ');
+    }
+
+    // Initialize UI at rotation 0
+    updateForWholeTurn(0);
+
+    // ----- Animation loop -----
+    let paused = false;
+    let lastTime = performance.now();
+
+    function animate(now) {
+      requestAnimationFrame(animate);
+
+      const deltaMs = now - lastTime;
+      lastTime = now;
+
+      if (paused) {
+        controls.update();
+        renderer.render(scene, camera);
+        return;
+      }
+
+      const deltaSeconds = deltaMs / 1000;
+
+      // Advance shaft turns
+      shaftTurns += turnsPerSecond * deltaSeconds;
+
+      // Rotate the shaft (around X axis)
+      shaft.rotation.x = shaftTurns * 2 * Math.PI;
+
+      // Rotate each gear: gear C_n rotates 1/n as fast as the shaft
+      // Negative because gears on top rotate opposite to shaft
+      gears.forEach((gear) => {
+        const n = gear.n;
+        gear.mesh.rotation.x = -shaftTurns * 2 * Math.PI / n;
+      });
+
+      // Check if we've passed a new whole rotation of the shaft
+      currentWholeTurn = Math.floor(shaftTurns + 1e-6);
+      if (currentWholeTurn !== previousWholeTurn) {
+        updateForWholeTurn(currentWholeTurn);
+        previousWholeTurn = currentWholeTurn;
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    requestAnimationFrame(animate);
+
+    // ----- Resize handling -----
+    window.addEventListener('resize', () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    });
+
+    // ----- Keyboard controls -----
+    function restart() {
+      // Remove all gears except initial ones
+      gears.forEach((gear, n) => {
+        scene.remove(gear.mesh);
+      });
+      gears.clear();
+
+      // Reset state
+      shaftTurns = 0;
+      currentWholeTurn = 0;
+      previousWholeTurn = 0;
+      primes = [2, 3, 5];
+      maxGearN = 5;
+
+      // Re-add initial gears
+      addGear(2);
+      addGear(3);
+      addGear(5);
+
+      // Reset visuals
+      shaft.rotation.x = 0;
+      updateForWholeTurn(0);
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        paused = !paused;
+        if (!paused) {
+          lastTime = performance.now();
+        }
+      } else if (e.code === 'KeyR') {
+        restart();
+      }
+    });
+  </script>
+</body>
+</html>
