@@ -238,6 +238,14 @@
     crank.position.set(0, shaftLength / 2, crankLength / 2);
     shaft.add(crank);
 
+    // Connector between shaft and crank (runs along Z axis at end of shaft)
+    const connectorLength = crankLength / 2 + shaftRadius;
+    const connectorGeom = new THREE.CylinderGeometry(crankRadius, crankRadius, connectorLength, 16);
+    const connector = new THREE.Mesh(connectorGeom, crankMat);
+    connector.rotation.x = Math.PI / 2; // rotate to align along Z
+    connector.position.set(0, shaftLength / 2, connectorLength / 2 - shaftRadius);
+    shaft.add(connector);
+
     const gearGlassMaterial = new THREE.MeshStandardMaterial({
       color: 0x55aaff,
       transparent: true,
