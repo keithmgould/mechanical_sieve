@@ -8,9 +8,9 @@
       margin: 0;
       padding: 0;
       overflow: hidden;
-      background: #050608;
+      background: #f0f0f0;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      color: #f5f5f5;
+      color: #222;
     }
 
     #overlay {
@@ -18,12 +18,13 @@
       top: 12px;
       left: 12px;
       padding: 12px 16px;
-      background: rgba(0, 0, 0, 0.65);
+      background: rgba(255, 255, 255, 0.85);
       border-radius: 10px;
       backdrop-filter: blur(8px);
       max-width: 320px;
       z-index: 10;
       font-size: 14px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
     }
 
     #overlay h1 {
@@ -43,13 +44,13 @@
     }
 
     #windowText.open {
-      background: rgba(0, 200, 120, 0.3);
-      color: #7bffa8;
+      background: rgba(0, 180, 100, 0.2);
+      color: #0a8a50;
     }
 
     #windowText.blocked {
-      background: rgba(220, 60, 60, 0.3);
-      color: #ff9b9b;
+      background: rgba(220, 60, 60, 0.2);
+      color: #c03030;
     }
 
     #gearsList {
@@ -60,7 +61,7 @@
     #hint {
       margin-top: 6px;
       font-size: 11px;
-      color: #c0c0c0;
+      color: #666;
       line-height: 1.35;
     }
 
@@ -71,15 +72,15 @@
       font-size: 120px;
       font-weight: 700;
       font-family: "Menlo", "SF Mono", Consolas, monospace;
-      color: #ffffff;
+      color: #222;
       z-index: 10;
-      text-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+      text-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
     }
 
     #bigR .label {
       font-size: 32px;
       font-weight: 400;
-      color: #888;
+      color: #666;
     }
   </style>
 </head>
@@ -119,7 +120,7 @@
 
     // ----- Basic three.js setup -----
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x050608);
+    scene.background = new THREE.Color(0xf0f0f0);
 
     const camera = new THREE.PerspectiveCamera(
       45,
@@ -156,12 +157,12 @@
     // ----- Shaft -----
     // Shaft is along the X axis, rotating around the X axis
     // Length and position will be set after we define the viewing tube dimensions
-    const shaftRadius = 0.15;
+    // Shaft is C1, so its radius should be baseGearRadius * 1
+    const baseGearRadius = 0.8;
+    const shaftRadius = baseGearRadius;
 
     // ----- Gears (glass discs) -----
     const gears = new Map(); // n -> { n, mesh, dot, isBlocking }
-
-    const baseGearRadius = 0.8;
     const gearThickness  = 0.18;
 
     // ----- Viewing tube (shows where to look through the disks) -----
@@ -357,7 +358,7 @@
       const ctx = canvas.getContext('2d');
       canvas.width = 128;
       canvas.height = 64;
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = '#333333';
       ctx.font = 'bold 48px Arial';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -367,9 +368,8 @@
       const spriteMat = new THREE.SpriteMaterial({ map: texture });
       const sprite = new THREE.Sprite(spriteMat);
       sprite.scale.set(1.5, 0.75, 1);
-      // Position below the gear (gear center is at gearRadius + shaftRadius above shaft)
-      // So label goes below the shaft
-      sprite.position.set(xPos, -0.8, 0);
+      // Position below the shaft (shaft radius is now larger)
+      sprite.position.set(xPos, -shaftRadius - 0.8, 0);
       scene.add(sprite);
 
       // New gears are always created when they would be blocking (at turn = n)
