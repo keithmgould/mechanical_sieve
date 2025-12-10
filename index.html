@@ -134,24 +134,8 @@
 
     // ----- Shaft -----
     // Shaft is along the X axis, rotating around the X axis
+    // Length and position will be set after we define the viewing tube dimensions
     const shaftRadius = 0.15;
-    const shaftLength = 12;
-
-    const shaftGeom = new THREE.CylinderGeometry(
-      shaftRadius,
-      shaftRadius,
-      shaftLength,
-      32
-    );
-    const shaftMat = new THREE.MeshStandardMaterial({
-      color: 0xb0b0b0,
-      metalness: 0.7,
-      roughness: 0.3
-    });
-
-    const shaft = new THREE.Mesh(shaftGeom, shaftMat);
-    shaft.rotation.z = Math.PI / 2; // make it run along X instead of Y
-    scene.add(shaft);
 
     // ----- Gears (glass discs) -----
     const gears = new Map(); // n -> { n, mesh, dot, isBlocking }
@@ -163,9 +147,9 @@
     const tubeRadius = 0.15;
     const gearSpacing = 2.1; // distance along the X axis between gear centers
     // C2 is at index 0, positioned at (0 - 1.5) * gearSpacing = -3.15
-    // Tube should start just past C2 on the left and extend to the target on the right
+    // Tube should start just past C2 on the left and extend far to the right for future gears
     const tubeStartX = -1.5 * gearSpacing - 1.5; // just past C2
-    const tubeEndX = shaftLength / 2; // toward the target
+    const tubeEndX = 50; // far enough for many gears
     const tubeLength = tubeEndX - tubeStartX;
     const tubeCenterX = (tubeStartX + tubeEndX) / 2;
 
@@ -198,6 +182,25 @@
     target.rotation.y = Math.PI / 2; // face along the X axis
     scene.add(target);
 
+    // ----- Create shaft to match tube dimensions -----
+    const shaftLength = tubeLength;
+    const shaftGeom = new THREE.CylinderGeometry(
+      shaftRadius,
+      shaftRadius,
+      shaftLength,
+      32
+    );
+    const shaftMat = new THREE.MeshStandardMaterial({
+      color: 0xb0b0b0,
+      metalness: 0.7,
+      roughness: 0.3
+    });
+
+    const shaft = new THREE.Mesh(shaftGeom, shaftMat);
+    shaft.rotation.z = Math.PI / 2; // make it run along X instead of Y
+    shaft.position.set(tubeCenterX, 0, 0); // center at same X as tube
+    scene.add(shaft);
+
     const gearGlassMaterial = new THREE.MeshStandardMaterial({
       color: 0x55aaff,
       transparent: true,
@@ -208,15 +211,37 @@
     });
 
     const opaqueSliceMaterial = new THREE.MeshStandardMaterial({
-      color: 0xff0000,
+      color: 0x3388dd,
       transparent: false,
       metalness: 0.2,
       roughness: 0.3,
       side: THREE.DoubleSide
     });
 
+    const opaqueBaseColor = new THREE.Color(0x3388dd);
+    const opaqueBlockedColor = new THREE.Color(0xff4444);
+
     let primes = [2];  // starting gears
     let maxGearN = 2;
+
+    function removeGear(n) {
+      if (!gears.has(n)) return;
+      if (n === 2) return; // never remove C2
+
+      const gear = gears.get(n);
+      scene.remove(gear.mesh);
+      if (gear.label) scene.remove(gear.label);
+      gears.delete(n);
+
+      // Remove from primes list
+      const idx = primes.indexOf(n);
+      if (idx > -1) {
+        primes.splice(idx, 1);
+      }
+
+      // Recalculate maxGearN
+      maxGearN = Math.max(...primes);
+    }
 
     function addGear(n) {
       if (gears.has(n)) return;
@@ -282,11 +307,36 @@
       group.add(diskGroup);
       scene.add(group);
 
+      // Add label below the gear showing its number
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = 128;
+      canvas.height = 64;
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 48px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(n), 64, 32);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      const spriteMat = new THREE.SpriteMaterial({ map: texture });
+      const sprite = new THREE.Sprite(spriteMat);
+      sprite.scale.set(1.5, 0.75, 1);
+      // Position below the gear (gear center is at gearRadius + shaftRadius above shaft)
+      // So label goes below the shaft
+      sprite.position.set(xPos, -0.8, 0);
+      scene.add(sprite);
+
+      // New gears are always created when they would be blocking (at turn = n)
+      // So set the initial color to red
+      opaqueMesh.material.color.copy(opaqueBlockedColor);
+
       gears.set(n, {
         n,
         mesh: group,
         opaqueMesh,
-        isBlocking: false
+        label: sprite,
+        isBlocking: true
       });
 
       // Track primes list (exclude 1, it's just the shaft tracker)
@@ -303,9 +353,9 @@
     addGear(2);
 
     // ----- Window logic / animation state -----
-    let shaftTurns = 0;           // total rotations of the shaft
-    let currentWholeTurn = 0;     // floor(shaftTurns)
-    let previousWholeTurn = 0;
+    let shaftTurns = 2;           // total rotations of the shaft
+    let currentWholeTurn = 2;     // floor(shaftTurns)
+    let previousWholeTurn = 2;
     let windowOpen = true;
 
     const turnsPerSecond = 0.4;   // speed
@@ -318,6 +368,8 @@
         const isBlock = (turn > 0 && turn % n === 0); // block when turn is a multiple of n
         gear.isBlocking = isBlock;
         anyBlocking = anyBlocking || isBlock;
+        // Change opaque slice color: red if blocking, blue otherwise
+        gear.opaqueMesh.material.color.copy(isBlock ? opaqueBlockedColor : opaqueBaseColor);
       });
 
       windowOpen = !anyBlocking;
@@ -345,11 +397,12 @@
       gearsListEl.textContent = primes.join(', ');
     }
 
-    // Initialize UI at rotation 0
-    updateForWholeTurn(0);
+    // Initialize UI at rotation 2
+    updateForWholeTurn(2);
 
     // ----- Animation loop -----
     let paused = false;
+    let direction = 1; // 1 = forward, -1 = reverse
     let lastTime = performance.now();
 
     function animate(now) {
@@ -366,8 +419,16 @@
 
       const deltaSeconds = deltaMs / 1000;
 
-      // Advance shaft turns
-      shaftTurns += turnsPerSecond * deltaSeconds;
+      // Advance or reverse shaft turns based on direction
+      const newShaftTurns = shaftTurns + direction * turnsPerSecond * deltaSeconds;
+
+      // Stop at R=2 when going backwards
+      if (direction === -1 && newShaftTurns < 2) {
+        shaftTurns = 2;
+        paused = true;
+      } else {
+        shaftTurns = newShaftTurns;
+      }
 
       // Rotate the shaft (around X axis)
       shaft.rotation.x = shaftTurns * 2 * Math.PI;
@@ -380,8 +441,22 @@
       });
 
       // Check if we've passed a new whole rotation of the shaft
-      currentWholeTurn = Math.floor(shaftTurns + 1e-6);
+      if (direction === 1) {
+        currentWholeTurn = Math.floor(shaftTurns + 1e-6);
+      } else {
+        // When going backwards, use ceiling to detect crossing
+        currentWholeTurn = Math.ceil(shaftTurns - 1e-6);
+      }
+
       if (currentWholeTurn !== previousWholeTurn) {
+        // When going backwards, check if we need to remove a gear
+        if (direction === -1 && previousWholeTurn > currentWholeTurn) {
+          // We crossed from previousWholeTurn to currentWholeTurn (going down)
+          // If previousWholeTurn was a prime we added, remove it
+          if (gears.has(previousWholeTurn) && previousWholeTurn > 2) {
+            removeGear(previousWholeTurn);
+          }
+        }
         updateForWholeTurn(currentWholeTurn);
         previousWholeTurn = currentWholeTurn;
       }
@@ -403,25 +478,28 @@
 
     // ----- Keyboard controls -----
     function restart() {
-      // Remove all gears except initial ones
+      // Remove all gears and their labels
       gears.forEach((gear, n) => {
         scene.remove(gear.mesh);
+        if (gear.label) scene.remove(gear.label);
       });
       gears.clear();
 
       // Reset state
-      shaftTurns = 0;
-      currentWholeTurn = 0;
-      previousWholeTurn = 0;
+      shaftTurns = 2;
+      currentWholeTurn = 2;
+      previousWholeTurn = 2;
       primes = [2];
       maxGearN = 2;
+      direction = 1;
+      paused = false;
 
       // Re-add initial gear
       addGear(2);
 
       // Reset visuals
-      shaft.rotation.x = 0;
-      updateForWholeTurn(0);
+      shaft.rotation.x = 2 * 2 * Math.PI;
+      updateForWholeTurn(2);
     }
 
     window.addEventListener('keydown', (e) => {
@@ -433,6 +511,16 @@
         }
       } else if (e.code === 'KeyR') {
         restart();
+      } else if (e.code === 'KeyD') {
+        // Reverse
+        direction = -1;
+        paused = false;
+        lastTime = performance.now();
+      } else if (e.code === 'KeyF') {
+        // Forward
+        direction = 1;
+        paused = false;
+        lastTime = performance.now();
       }
     });
   </script>
