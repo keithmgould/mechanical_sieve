@@ -222,6 +222,22 @@
     shaft.position.set(tubeCenterX, 0, 0); // center at same X as tube
     scene.add(shaft);
 
+    // ----- Crank handle at the near end of the shaft -----
+    const crankLength = baseGearRadius * 2; // length of C2's radius
+    const crankRadius = 0.08;
+    const crankGeom = new THREE.CylinderGeometry(crankRadius, crankRadius, crankLength, 16);
+    const crankMat = new THREE.MeshStandardMaterial({
+      color: 0xffaa00,
+      metalness: 0.6,
+      roughness: 0.3
+    });
+    const crank = new THREE.Mesh(crankGeom, crankMat);
+    // Position crank at end of shaft, sticking out radially
+    // In shaft's local coords: Y is along the shaft, so we offset in Y to get to the end
+    // and offset in Z to stick out from the shaft surface
+    crank.position.set(0, shaftLength / 2, crankLength / 2);
+    shaft.add(crank);
+
     const gearGlassMaterial = new THREE.MeshStandardMaterial({
       color: 0x55aaff,
       transparent: true,
